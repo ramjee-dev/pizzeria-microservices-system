@@ -1,0 +1,23 @@
+# Maven
+target/
+*.jar
+*.war
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# H2 Database
+*.db
+*.trace.db
+
+# Compiled classes
+*.class
