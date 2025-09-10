@@ -1,0 +1,78 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+  cloud:
+    function:
+      definition: processOrderEvents;processNotificationRequests
+    stream:
+      bindings:
+        # Order Events Consumer
+        processOrderEvents-in-0:
+          destination: order.events
+          group: notification-service-group
+          consumer:
+            max-attempts: 3
+            back-off-initial-interval: 1000
+
+        # Notification Request Consumer
+        processNotificationRequests-in-0:
+          destination: notification.requests
+          group: notification-service-group
+
+        # Notification Output Producer
+        sendNotifications-out-0:
+          destination: notifications.sent
+
+      rabbit:
+        bindings:
+          processOrderEvents-in-0:
+            consumer:
+              auto-bind-dlq: true
+              republish-to-dlq: true
+
+  # Email Configuration (Optional)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: your-email@gmail.com
+    password: your-app-password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+eureka:
+  client:
+    service-url:
+      default-zone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    hostname: localhost
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+logging:
+  level:
+    com.pizzeria.notification_service: DEBUG
+    org.springframework.cloud.stream: INFO
+

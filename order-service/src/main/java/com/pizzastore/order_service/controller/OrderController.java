@@ -89,6 +89,28 @@ public class OrderController {
         return ResponseEntity.ok(updatedOrder);
     }
 
+    @PostMapping("/admin/{orderId}/notify")
+    @Operation(summary = "Send custom notification for order", description = "Send custom notification message for specific order")
+    public ResponseEntity<String> sendOrderNotification(
+            @PathVariable Long orderId,
+            @RequestParam String message,
+            @RequestParam(defaultValue = "EMAIL") String channel) {
+
+        logger.info("Sending custom notification for order: {}", orderId);
+
+        try {
+            OrderDto order = orderService.getOrderById(orderId);
+            orderService.publishNotificationRequest(orderId, order.getUserId(), message, channel);
+
+            return ResponseEntity.ok("Custom notification sent successfully");
+
+        } catch (Exception e) {
+            logger.error("Error sending notification: {}", e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body("Failed to send notification: " + e.getMessage());
+        }
+    }
+
     @GetMapping("/admin/statistics")
     @Operation(summary = "Get order statistics (Admin)", description = "Get order statistics and counts")
     public ResponseEntity<Map<String, Object>> getOrderStatistics() {

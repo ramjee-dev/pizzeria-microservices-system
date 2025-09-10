@@ -52,6 +52,25 @@ public class MenuController {
         return ResponseEntity.ok(items);
     }
 
+    @GetMapping("/items/{itemId}")
+    @Operation(summary = "Get menu item by ID", description = "Retrieve menu item details by ID")
+    public ResponseEntity<MenuItemDto> getMenuItemById(@PathVariable Long itemId) {
+
+        logger.info("GET /api/menu/items/{} - Getting menu item by ID", itemId);
+
+        try {
+            MenuItemDto menuItem = menuService.getMenuItemById(itemId);
+            return ResponseEntity.ok(menuItem);
+
+        } catch (RuntimeException e) {
+            logger.error("Menu item not found: {}", e.getMessage());
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error fetching menu item: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
     @GetMapping("/category/{categoryName}")
     @Operation(summary = "Get items by category", description = "Retrieve available menu items by category name")
     public ResponseEntity<List<MenuItemDto>> getItemsByCategory(

@@ -28,6 +28,24 @@ spring:
     init:
       mode: always
 
+  # RabbitMQ Configuration for Event Publishing
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+  # Spring Cloud Stream Configuration
+  cloud:
+    stream:
+      bindings:
+        # Order events output binding
+        order-events-out-0:
+          destination: order.events
+        # Notification requests output binding
+        notification-requests-out-0:
+          destination: notification.requests
+
 eureka:
   client:
     service-url:

@@ -13,10 +13,14 @@ import com.pizzastore.order_service.service.clients.MenuFeignClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.stream.function.StreamBridge;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,15 +36,20 @@ public class OrderService {
     private OrderRepository orderRepository;
     @Autowired
     private MenuFeignClient menuFeignClient;
+    @Autowired
+    private StreamBridge streamBridge;
 
     // Create new order
     public OrderDto createOrder(OrderRequestDto orderRequest) {
         logger.info("Creating order for user ID: {}", orderRequest.getUserId());
 
-        // Validate menu items exist and are available
+        // Fixed validation in OrderService.java
         for (OrderItemDto item : orderRequest.getItems()) {
             try {
                 MenuItemResponse menuItem = menuFeignClient.getMenuItem(item.getMenuItemId());
+                if (menuItem == null) {
+                    throw new RuntimeException("Menu item not found with ID: " + item.getMenuItemId());
+                }
                 if (!menuItem.getAvailable()) {
                     throw new RuntimeException("Menu item not available: " + menuItem.getName());
                 }
@@ -48,7 +57,7 @@ public class OrderService {
                 item.setItemName(menuItem.getName());
                 item.setPrice(BigDecimal.valueOf(menuItem.getPrice()));
             } catch (Exception e) {
-                logger.error("Error validating menu item: {}", e.getMessage());
+                logger.error("Error validating menu item {}: {}", item.getMenuItemId(), e.getMessage());
                 throw new RuntimeException("Invalid menu item ID: " + item.getMenuItemId());
             }
         }
@@ -85,10 +94,16 @@ public class OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
+
         logger.info("Order created successfully with ID: {}", savedOrder.getOrderId());
+
+        // 🚀 PUBLISH ORDER CREATED EVENT
+        publishOrderEvent(savedOrder.getOrderId(), savedOrder.getUserId(), "ORDER_CREATED");
 
         return convertToOrderDto(savedOrder);
     }
+
+
 
     // Get order by ID
     public OrderDto getOrderById(Long orderId) {
@@ -126,6 +141,9 @@ public class OrderService {
 
         logger.info("Order status updated successfully");
 
+        // 🚀 PUBLISH ORDER STATUS UPDATE EVENT
+        publishOrderEvent(savedOrder.getOrderId(), savedOrder.getUserId(), "ORDER_" + status.toUpperCase());
+
         return convertToOrderDto(savedOrder);
     }
 
@@ -141,6 +159,68 @@ public class OrderService {
 
         return stats;
     }
+
+    // 🔥 NEW: Publish Order Event Method
+    public void publishOrderEvent(Long orderId, Long userId, String eventType) {
+        try {
+            // Create event payload
+            Map<String, Object> orderEventPayload = new HashMap<>();
+            orderEventPayload.put("orderId", orderId.toString());
+            orderEventPayload.put("userId", userId.toString());
+            orderEventPayload.put("eventType", eventType);
+            orderEventPayload.put("timestamp", LocalDateTime.now().toString());
+            orderEventPayload.put("serviceName", "ORDER-SERVICE");
+
+            // Build message with headers
+            Message<Map<String, Object>> message = MessageBuilder
+                    .withPayload(orderEventPayload)
+                    .setHeader("eventType", eventType)
+                    .setHeader("orderId", orderId.toString())
+                    .setHeader("userId", userId.toString())
+                    .setHeader("source", "ORDER-SERVICE")
+                    .build();
+
+            // Send to order.events destination
+            boolean sent = streamBridge.send("order-events-out-0", message);
+
+            if (sent) {
+                logger.info("✅ Published order event: {} for order: {} to queue: order.events",
+                        eventType, orderId);
+            } else {
+                logger.warn("❌ Failed to publish order event: {} for order: {}", eventType, orderId);
+            }
+
+        } catch (Exception e) {
+            logger.error("💥 Error publishing order event: {} for order: {} - {}",
+                    eventType, orderId, e.getMessage(), e);
+            // Don't throw exception to avoid breaking the main order flow
+        }
+    }
+
+    // 🔥 NEW: Direct Notification Publishing (Optional)
+    public void publishNotificationRequest(Long orderId, Long userId, String message, String channel) {
+        try {
+            Map<String, Object> notificationPayload = new HashMap<>();
+            notificationPayload.put("eventType", "DIRECT_NOTIFICATION");
+            notificationPayload.put("orderId", orderId.toString());
+            notificationPayload.put("userId", userId.toString());
+            notificationPayload.put("message", message);
+            notificationPayload.put("channel", channel);
+            notificationPayload.put("timestamp", LocalDateTime.now().toString());
+
+            boolean sent = streamBridge.send("notification-requests-out-0", notificationPayload);
+
+            if (sent) {
+                logger.info("✅ Published notification request for order: {}", orderId);
+            } else {
+                logger.warn("❌ Failed to publish notification request for order: {}", orderId);
+            }
+
+        } catch (Exception e) {
+            logger.error("💥 Error publishing notification request: {}", e.getMessage(), e);
+        }
+    }
+
 
     // Helper method to convert Order to OrderDto
     private OrderDto convertToOrderDto(Order order) {

@@ -10,4 +10,8 @@ public class MenuItemResponse {
     private String name;
     private Double price;
     private Boolean available;
+    private String categoryName;
+
+    // Default constructor
+    public MenuItemResponse() {}
 }
